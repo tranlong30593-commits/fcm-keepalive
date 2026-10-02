@@ -1,1239 +1,288 @@
-<!DOCTYPE html>
-<html lang="vi" class="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FCM Keep-Alive (ROM CN Fixer) - Source & APK Builder</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        code, pre { font-family: 'JetBrains Mono', monospace; }
-        .pulse-ring {
-            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-        }
-        @keyframes pulse-ring {
-            0% { transform: scale(0.8); opacity: 0.8; }
-            80%, 100% { transform: scale(2.2); opacity: 0; }
-        }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #18181b; }
-        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #52525b; }
-    </style>
-</head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col">
-
-    <header class="border-b border-zinc-800 bg-zinc-900/70 backdrop-blur sticky top-0 z-30">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                    <i class="fa-solid fa-heart-pulse text-xl"></i>
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h1 class="font-bold text-lg tracking-tight text-white">FCM Heartbeat Keep-Alive</h1>
-                        <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">~65 KB APK</span>
-                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium">Zero Internet Permission</span>
-                    </div>
-                    <p class="text-xs text-zinc-400">Mã nguồn Java thuần siêu nhẹ chống trễ thông báo ROM CN (Xiaomi HyperOS, ColorOS, OriginOS...)</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <button onclick="switchMainView('code')" id="btn-view-code" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white shadow transition flex items-center gap-2">
-                    <i class="fa-solid fa-code"></i> Mã nguồn & Đóng gói APK
-                </button>
-                <button onclick="switchMainView('guide')" id="btn-view-guide" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition flex items-center gap-2">
-                    <i class="fa-solid fa-hammer"></i> Hướng dẫn tạo APK không cần cài phần mềm
-                </button>
-            </div>
-        </div>
-    </header>
-
-    <main class="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        <!-- Left Column: Interactive Android Simulator -->
-        <div class="lg:col-span-5 flex flex-col items-center">
-            <div class="w-full max-w-[360px] bg-zinc-900 border-[6px] border-zinc-800 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
-                <!-- Phone Status Bar -->
-                <div class="px-6 pt-3 pb-2 flex justify-between items-center text-[11px] text-zinc-400 bg-zinc-950">
-                    <span class="font-semibold text-zinc-200" id="sim-clock">16:10</span>
-                    <div class="flex items-center gap-1.5">
-                        <span class="text-[10px] font-bold text-emerald-400">5G</span>
-                        <i class="fa-solid fa-signal text-[10px]"></i>
-                        <i class="fa-solid fa-wifi text-[10px]"></i>
-                        <span class="bg-zinc-800 px-1.5 py-0.2 rounded text-[10px] font-semibold text-zinc-200">83%</span>
-                    </div>
-                </div>
-
-                <!-- Simulated App UI -->
-                <div class="p-5 flex-1 flex flex-col justify-between bg-zinc-950 space-y-4">
-                    <div>
-                        <div class="flex items-center justify-between mb-4">
-                            <div>
-                                <h2 class="text-base font-bold text-white">FCM Keep-Alive CN</h2>
-                                <p class="text-[11px] text-zinc-400">v1.0 • Không quyền Internet • Siêu nhẹ</p>
-                            </div>
-                            <span id="sim-badge" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
-                                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                                Đang chạy
-                            </span>
-                        </div>
-
-                        <!-- Heartbeat Status Card -->
-                        <div class="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 mb-4">
-                            <div class="flex items-center gap-3.5">
-                                <div class="relative flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                                    <span id="sim-pulse" class="absolute w-8 h-8 rounded-full bg-emerald-500/30 pulse-ring"></span>
-                                    <i class="fa-solid fa-bolt text-lg relative z-10"></i>
-                                </div>
-                                <div class="flex-1">
-                                    <div class="text-xs text-zinc-400">Trạng thái Google FCM</div>
-                                    <div id="sim-status-title" class="text-sm font-bold text-emerald-400">Đang duy trì nhịp tim (Active)</div>
-                                    <div id="sim-last-ping" class="text-[11px] text-zinc-500 mt-0.5">Lần kích hoạt cuối: Vừa xong</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Interval Selector -->
-                        <div class="mb-4">
-                            <label class="block text-xs font-semibold text-zinc-300 mb-2">Chu kỳ kiểm tra & nối lại FCM:</label>
-                            <div class="grid grid-cols-3 gap-2">
-                                <button onclick="setSimInterval(5)" id="int-5" class="py-2.5 rounded-xl text-xs font-semibold border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 transition">
-                                    5 phút
-                                </button>
-                                <button onclick="setSimInterval(10)" id="int-10" class="py-2.5 rounded-xl text-xs font-semibold border border-emerald-500 bg-emerald-500/15 text-emerald-300 transition">
-                                    10 phút (Chuẩn)
-                                </button>
-                                <button onclick="setSimInterval(15)" id="int-15" class="py-2.5 rounded-xl text-xs font-semibold border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 transition">
-                                    15 phút
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Action Buttons -->
-                        <div class="space-y-2.5">
-                            <button onclick="toggleSimService()" id="btn-sim-toggle" class="w-full py-3 rounded-xl font-semibold text-xs bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition flex items-center justify-center gap-2">
-                                <i class="fa-solid fa-power-off"></i> Tắt duy trì FCM
-                            </button>
-
-                            <button onclick="triggerManualHeartbeat()" class="w-full py-2.5 rounded-xl font-semibold text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 transition flex items-center justify-center gap-2">
-                                <i class="fa-solid fa-paper-plane text-emerald-400"></i> Bắn tín hiệu Reconnect ngay
-                            </button>
-
-                            <button onclick="openFcmDiagnosticsModal()" class="w-full py-2.5 rounded-xl font-semibold text-xs bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition flex items-center justify-center gap-2">
-                                <i class="fa-solid fa-stethoscope text-blue-400"></i> Mở *#*#426#*#* (FCM Diagnostics)
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Mini Console Log inside Phone -->
-                    <div class="bg-black/60 border border-zinc-800/80 rounded-xl p-2.5">
-                        <div class="flex items-center justify-between text-[10px] text-zinc-500 mb-1">
-                            <span>NHẬT KÝ BROADCAST INTENT</span>
-                            <span class="text-emerald-400 font-mono">NO-INTERNET</span>
-                        </div>
-                        <div id="sim-logs" class="text-[10px] font-mono text-zinc-300 space-y-1 max-h-24 overflow-y-auto">
-                            <div class="text-emerald-400">[16:10:01] Sent: GTALK_HEARTBEAT</div>
-                            <div class="text-emerald-400">[16:10:01] Sent: MCS_HEARTBEAT</div>
-                            <div class="text-zinc-400">[16:10:01] Next ExactAlarm in 10 mins</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Phone Home Indicator -->
-                <div class="py-2 bg-zinc-950 flex justify-center">
-                    <div class="w-28 h-1 rounded-full bg-zinc-700"></div>
-                </div>
-            </div>
-            <p class="text-xs text-zinc-400 mt-3 text-center">👆 Bản mô phỏng giao diện thật của ứng dụng sau khi đóng gói APK</p>
-        </div>
-
-        <!-- Right Column: Source Code & One-Click APK Builder Instructions -->
-        <div class="lg:col-span-7 flex flex-col">
-            
-            <!-- VIEW 1: SOURCE CODE FILES -->
-            <div id="view-code" class="flex-1 flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl">
-                <!-- File Tabs -->
-                <div class="flex items-center justify-between border-b border-zinc-800 bg-zinc-950/60 px-3 pt-2 overflow-x-auto">
-                    <div class="flex space-x-1" id="file-tabs">
-                        <button onclick="selectFile('build-apk.yml')" id="tab-build-apk.yml" class="px-3.5 py-2 text-xs font-mono rounded-t-lg bg-zinc-900 text-amber-400 border-t border-x border-zinc-800 font-semibold">
-                            ⚡ 1-File build-apk.yml (Khuyên dùng)
-                        </button>
-                        <button onclick="selectFile('MainActivity.java')" id="tab-MainActivity.java" class="px-3.5 py-2 text-xs font-mono rounded-t-lg text-zinc-400 hover:text-zinc-200">
-                            MainActivity.java
-                        </button>
-                        <button onclick="selectFile('HeartbeatReceiver.java')" id="tab-HeartbeatReceiver.java" class="px-3.5 py-2 text-xs font-mono rounded-t-lg text-zinc-400 hover:text-zinc-200">
-                            HeartbeatReceiver.java
-                        </button>
-                        <button onclick="selectFile('AndroidManifest.xml')" id="tab-AndroidManifest.xml" class="px-3.5 py-2 text-xs font-mono rounded-t-lg text-zinc-400 hover:text-zinc-200">
-                            AndroidManifest.xml
-                        </button>
-                        <button onclick="selectFile('build.gradle')" id="tab-build.gradle" class="px-3.5 py-2 text-xs font-mono rounded-t-lg text-zinc-400 hover:text-zinc-200">
-                            app/build.gradle
-                        </button>
-                    </div>
-                    <button onclick="copyCurrentCode()" id="btn-copy" class="mb-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white flex items-center gap-1.5 shrink-0 transition shadow">
-                        <i class="fa-regular fa-copy"></i> Copy file này
-                    </button>
-                </div>
-
-                <!-- File Description Bar -->
-                <div id="file-desc" class="px-4 py-2 bg-zinc-900/90 border-b border-zinc-800/80 text-xs text-zinc-400 flex items-center justify-between">
-                    <span>Giao diện chính bằng Java thuần (dùng Android SDK có sẵn, không cần file XML layout giúp giảm tối đa dung lượng APK).</span>
-                    <span class="text-[11px] font-mono text-zinc-500">app/src/main/java/vn/romcn/fcmfixer/MainActivity.java</span>
-                </div>
-
-                <!-- Code Content -->
-                <div class="relative flex-1 overflow-auto bg-[#0d0f12] p-4">
-                    <pre class="text-xs leading-relaxed text-zinc-200 overflow-x-auto"><code id="code-display"></code></pre>
-                </div>
-            </div>
-
-            <!-- VIEW 2: STEP-BY-STEP APK PACKAGING GUIDE -->
-            <div id="view-guide" class="hidden flex-1 bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5 overflow-y-auto">
-                <div class="flex items-start justify-between gap-4 border-b border-zinc-800 pb-4">
-                    <div>
-                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                            <i class="fa-brands fa-github text-emerald-400 text-xl"></i>
-                            Hướng dẫn chi tiết tạo APK trên GitHub (Chỉ cần tạo 1 file duy nhất!)
-                        </h3>
-                        <p class="text-xs text-zinc-400 mt-1">
-                            Tôi đã tích hợp sẵn toàn bộ mã nguồn vào trong kịch bản <code>build-apk.yml</code>. Bạn <strong>không cần tạo từng thư mục phức tạp</strong>, chỉ cần làm đúng 4 bước dưới đây trên trình duyệt điện thoại hoặc máy tính:
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Step by Step Cards -->
-                <div class="space-y-3.5">
-                    <!-- Step 1 -->
-                    <div class="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800 flex gap-3.5 items-start">
-                        <div class="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</div>
-                        <div class="text-xs space-y-1.5 flex-1">
-                            <div class="font-bold text-white text-sm">Tạo kho chứa (Repository) mới trên GitHub</div>
-                            <p class="text-zinc-300 leading-relaxed">
-                                • Đăng nhập vào <a href="https://github.com/new" target="_blank" class="text-emerald-400 underline font-medium">github.com/new</a>.<br>
-                                • Ô <strong>Repository name</strong>: gõ tên bất kỳ (ví dụ: <code>fcm-keepalive</code>).<br>
-                                • Chọn <strong>Public</strong> (để dùng máy chủ build miễn phí không giới hạn), tích chọn ô <strong>Add a README file</strong>, rồi bấm nút màu xanh <strong>Create repository</strong>.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Step 2 -->
-                    <div class="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800 flex gap-3.5 items-start">
-                        <div class="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</div>
-                        <div class="text-xs space-y-1.5 flex-1">
-                            <div class="font-bold text-white text-sm">Tạo 1 file kịch bản tự động duy nhất</div>
-                            <p class="text-zinc-300 leading-relaxed">
-                                • Trong trang dự án vừa tạo, bấm nút <strong>Add file</strong> → chọn <strong>Create new file</strong>.<br>
-                                • Ở ô đặt tên file trên cùng (<em>Name your file...</em>), bạn copy chính xác dòng chữ dưới đây dán vào (GitHub sẽ tự động chia thư mục khi có dấu <code>/</code>):
-                            </p>
-                            <div class="flex items-center gap-2 bg-black px-3 py-2 rounded-lg border border-zinc-800 font-mono text-amber-300">
-                                <span id="workflow-path">.github/workflows/build-apk.yml</span>
-                                <button onclick="copyWorkflowPath()" class="ml-auto text-[11px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-sans">Copy đường dẫn</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 3 -->
-                    <div class="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex gap-3.5 items-start">
-                        <div class="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</div>
-                        <div class="text-xs space-y-2 flex-1">
-                            <div class="font-bold text-white text-sm">Dán nội dung kịch bản All-in-One và Lưu lại</div>
-                            <p class="text-zinc-300 leading-relaxed">
-                                • Bấm nút <strong>Copy kịch bản build-apk.yml</strong> bên dưới rồi dán vào khung soạn thảo lớn trên GitHub.<br>
-                                • Bấm nút màu xanh <strong>Commit changes...</strong> (ở góc trên bên phải) → Xác nhận <strong>Commit changes</strong> một lần nữa.
-                            </p>
-                            <button onclick="switchMainView('code'); selectFile('build-apk.yml'); copyCurrentCode();" class="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs inline-flex items-center gap-2 transition">
-                                <i class="fa-regular fa-copy"></i> Copy ngay nội dung file build-apk.yml
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Step 4 -->
-                    <div class="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800 flex gap-3.5 items-start">
-                        <div class="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">4</div>
-                        <div class="text-xs space-y-1.5 flex-1">
-                            <div class="font-bold text-white text-sm">Tải file APK về điện thoại sau 90 giây</div>
-                            <p class="text-zinc-300 leading-relaxed">
-                                • Nhìn lên thanh menu ngang của GitHub, bấm vào mục <strong>Actions</strong> (có biểu tượng hình tròn play).<br>
-                                • Bạn sẽ thấy tiến trình <strong>Build FCM Keep-Alive APK</strong> đang xoay màu vàng. Đợi khoảng 1–2 phút cho đến khi nó chuyển sang <strong>dấu tích xanh lá (✔)</strong>.<br>
-                                • Bấm trực tiếp vào dòng chữ <strong>Build FCM Keep-Alive APK</strong> đó → Kéo xuống cuối trang phần <strong>Artifacts</strong> → Bấm vào <strong>FCM-KeepAlive-ROM-CN-APK</strong> để tải file nén chứa <code>app-debug.apk</code> về cài đặt!
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Important Note for ROM CN -->
-                <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 space-y-1.5">
-                    <div class="font-bold flex items-center gap-2 text-amber-300">
-                        <i class="fa-solid fa-triangle-exclamation"></i> Lưu ý duy nhất khi cài lên máy ROM CN (Xiaomi, Vivo, OPPO):
-                    </div>
-                    <p class="leading-relaxed text-zinc-300">
-                        Sau khi giải nén và cài file <code>app-debug.apk</code>, nếu Google Play Protect hỏi vì app tự build chưa đăng ký Store thì bạn chọn <strong>Vẫn cài đặt (Install anyway)</strong>. Sau đó vào <strong>Cài đặt ứng dụng</strong> của máy → bật <strong>Tự khởi chạy (Autostart)</strong> và <strong>Pin: Không hạn chế</strong> cho app này là xong!
-                    </p>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <div id="fcm-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-        <div class="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div class="flex items-center gap-2">
-                    <i class="fa-brands fa-google text-blue-400"></i>
-                    <h4 class="font-bold text-sm text-white">FCM Diagnostics (*#*#426#*#*)</h4>
-                </div>
-                <button onclick="closeFcmDiagnosticsModal()" class="text-zinc-400 hover:text-white">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            <div class="bg-black rounded-xl p-3.5 font-mono text-xs space-y-1.5 text-zinc-300 border border-zinc-800">
-                <div class="text-emerald-400 font-bold">Status: CONNECTED</div>
-                <div>Host: mtalk.google.com:5228</div>
-                <div>Last Heartbeat Ping: <span id="modal-ping-time" class="text-amber-300">Just now (ACK received)</span></div>
-                <div>Reconnect Manager: Active via ExactAlarm</div>
-            </div>
-            <p class="text-xs text-zinc-400 leading-relaxed">
-                Trên điện thoại thật, khi bấm nút này, ứng dụng sẽ tự động gọi Intent mở trình quay số với mã <code>*#*#426#*#*</code> để bạn kiểm tra trạng thái <strong>Connected</strong> của máy chủ Google FCM.
-            </p>
-            <button onclick="closeFcmDiagnosticsModal()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl transition">
-                Đã hiểu
-            </button>
-        </div>
-    </div>
-
-    <script>
-        const sourceFiles = {
-            'MainActivity.java': {
-                path: 'app/src/main/java/vn/romcn/fcmfixer/MainActivity.java',
-                desc: 'Giao diện chính viết bằng Java thuần (không dùng thư viện ngoài, tạo giao diện trực tiếp bằng code để chỉ cần 1 file Java là chạy).',
-                code: `package vn.romcn.fcmfixer;
-
-import android.app.Activity;
-import android.content.Context;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
-import android.os.Build;
-import android.os.Bundle;
-import android.provider.Settings;
-import android.view.Gravity;
-import android.view.View;
-import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
-import android.widget.ScrollView;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
-
-/**
- * Ứng dụng FCM Keep-Alive cho ROM Nội Địa (CN)
- * - Không sử dụng quyền INTERNET (An toàn tuyệt đối 100%)
- * - Dung lượng sau khi đóng gói APK chỉ ~60KB
- */
-public class MainActivity extends Activity {
-
-    public static final String PREFS_NAME = "fcm_keepalive_prefs";
-    public static final String KEY_ENABLED = "is_enabled";
-    public static final String KEY_INTERVAL = "interval_minutes";
-    public static final String KEY_LAST_PING = "last_ping_time";
-
-    private TextView statusText;
-    private TextView lastPingText;
-    private Button toggleBtn;
-    private SharedPreferences prefs;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-
-        // Tạo giao diện trực tiếp bằng Java để không cần file XML (dễ đóng gói APK nhất)
-        ScrollView scrollView = new ScrollView(this);
-        scrollView.setBackgroundColor(Color.parseColor("#09090B"));
-        scrollView.setFillViewport(true);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(20);
-        root.setPadding(pad, dp(32), pad, pad);
-
-        // Tiêu đề ứng dụng
-        TextView title = new TextView(this);
-        title.setText("FCM Keep-Alive (ROM CN)");
-        title.setTextColor(Color.WHITE);
-        title.setTextSize(22);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        root.addView(title);
-
-        TextView subtitle = new TextView(this);
-        subtitle.setText("Duy trì kết nối Google FCM • Không quyền Internet • Siêu nhẹ");
-        subtitle.setTextColor(Color.parseColor("#A1A1AA"));
-        subtitle.setTextSize(13);
-        subtitle.setPadding(0, dp(4), 0, dp(20));
-        root.addView(subtitle);
-
-        // Khung hiển thị trạng thái
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16), dp(16), dp(16), dp(16));
-        GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setColor(Color.parseColor("#18181B"));
-        cardBg.setCornerRadius(dp(16));
-        cardBg.setStroke(dp(1), Color.parseColor("#27272A"));
-        card.setBackground(cardBg);
-
-        statusText = new TextView(this);
-        statusText.setTextSize(16);
-        statusText.setTypeface(Typeface.DEFAULT_BOLD);
-        card.addView(statusText);
-
-        lastPingText = new TextView(this);
-        lastPingText.setTextSize(13);
-        lastPingText.setTextColor(Color.parseColor("#A1A1AA"));
-        lastPingText.setPadding(0, dp(6), 0, 0);
-        card.addView(lastPingText);
-
-        root.addView(card);
-
-        // Lựa chọn chu kỳ 5 - 10 - 15 phút
-        TextView intervalLabel = new TextView(this);
-        intervalLabel.setText("Chu kỳ kiểm tra & kích hoạt lại FCM:");
-        intervalLabel.setTextColor(Color.WHITE);
-        intervalLabel.setTextSize(14);
-        intervalLabel.setTypeface(Typeface.DEFAULT_BOLD);
-        intervalLabel.setPadding(0, dp(24), 0, dp(10));
-        root.addView(intervalLabel);
-
-        RadioGroup radioGroup = new RadioGroup(this);
-        radioGroup.setOrientation(RadioGroup.VERTICAL);
-
-        int currentInterval = prefs.getInt(KEY_INTERVAL, 10);
-        int[] intervals = {5, 10, 15};
-        for (int min : intervals) {
-            RadioButton rb = new RadioButton(this);
-            rb.setId(min);
-            rb.setText(min + " phút / lần" + (min == 10 ? " (Khuyên dùng)" : ""));
-            rb.setTextColor(Color.parseColor("#E4E4E7"));
-            rb.setTextSize(14);
-            rb.setPadding(dp(8), dp(10), dp(8), dp(10));
-            if (min == currentInterval) rb.setChecked(true);
-            radioGroup.addView(rb);
-        }
-
-        radioGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            prefs.edit().putInt(KEY_INTERVAL, checkedId).apply();
-            if (prefs.getBoolean(KEY_ENABLED, false)) {
-                HeartbeatReceiver.scheduleNextAlarm(this, checkedId);
-                Toast.makeText(this, "Đã cập nhật chu kỳ: " + checkedId + " phút", Toast.LENGTH_SHORT).show();
-                updateUI();
-            }
-        });
-        root.addView(radioGroup);
-
-        // Nút Bật / Tắt dịch vụ
-        toggleBtn = createButton("", "#10B981", Color.WHITE);
-        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        btnParams.setMargins(0, dp(20), 0, dp(12));
-        toggleBtn.setLayoutParams(btnParams);
-        toggleBtn.setOnClickListener(v -> toggleService());
-        root.addView(toggleBtn);
-
-        // Nút Ping ngay lập tức
-        Button forcePingBtn = createButton("⚡ Bắn tín hiệu Reconnect FCM ngay", "#27272A", Color.WHITE);
-        forcePingBtn.setLayoutParams(btnParams);
-        forcePingBtn.setOnClickListener(v -> {
-            HeartbeatReceiver.sendFcmHeartbeatBroadcast(this);
-            Toast.makeText(this, "Đã gửi tín hiệu GTALK & MCS Heartbeat!", Toast.LENGTH_SHORT).show();
-            updateUI();
-        });
-        root.addView(forcePingBtn);
-
-        // Nút mở *#*#426#*#*
-        Button diagBtn = createButton("🔍 Mở bảng kiểm tra *#*#426#*#*", "#1E293B", Color.parseColor("#93C5FD"));
-        diagBtn.setLayoutParams(btnParams);
-        diagBtn.setOnClickListener(v -> openFcmDiagnostics());
-        root.addView(diagBtn);
-
-        scrollView.addView(root);
-        setContentView(scrollView);
-
-        updateUI();
-    }
-
-    private void toggleService() {
-        boolean isEnabled = prefs.getBoolean(KEY_ENABLED, false);
-        int interval = prefs.getInt(KEY_INTERVAL, 10);
-
-        if (!isEnabled) {
-            // Kiểm tra quyền đặt báo thức chính xác trên Android 12+ (API 31+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                android.app.AlarmManager am = (android.app.AlarmManager) getSystemService(Context.ALARM_SERVICE);
-                if (am != null && !am.canScheduleExactAlarms()) {
-                    Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
-                    intent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                    Toast.makeText(this, "Vui lòng cấp quyền Đặt báo thức chính xác!", Toast.LENGTH_LONG).show();
-                    return;
-                }
-            }
-            prefs.edit().putBoolean(KEY_ENABLED, true).apply();
-            HeartbeatReceiver.sendFcmHeartbeatBroadcast(this);
-            HeartbeatReceiver.scheduleNextAlarm(this, interval);
-            Toast.makeText(this, "Đã BẬT duy trì kết nối FCM!", Toast.LENGTH_SHORT).show();
-        } else {
-            prefs.edit().putBoolean(KEY_ENABLED, false).apply();
-            HeartbeatReceiver.cancelAlarm(this);
-            Toast.makeText(this, "Đã TẮT duy trì FCM.", Toast.LENGTH_SHORT).show();
-        }
-        updateUI();
-    }
-
-    private void openFcmDiagnostics() {
-        try {
-            // Gọi Secret Code 426 của Google Play Services
-            Intent secretIntent = new Intent("android.provider.Telephony.SECRET_CODE",
-                    Uri.parse("android_secret_code://426"));
-            sendBroadcast(secretIntent);
-        } catch (Exception e) {
-            // Fallback mở trình quay số với *#*#426#*#*
-            Intent dialIntent = new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode("*#*#426#*#*")));
-            startActivity(dialIntent);
-        }
-    }
-
-    private void updateUI() {
-        boolean isEnabled = prefs.getBoolean(KEY_ENABLED, false);
-        int interval = prefs.getInt(KEY_INTERVAL, 10);
-        String lastPing = prefs.getString(KEY_LAST_PING, "Chưa kích hoạt");
-
-        if (isEnabled) {
-            statusText.setText("🟢 ĐANG HOẠT ĐỘNG (" + interval + " phút/lần)");
-            statusText.setTextColor(Color.parseColor("#34D399"));
-            toggleBtn.setText("TẮT DUY TRÌ FCM");
-            setButtonColor(toggleBtn, "#E11D48");
-        } else {
-            statusText.setText("⚪ ĐANG TẮT");
-            statusText.setTextColor(Color.parseColor("#A1A1AA"));
-            toggleBtn.setText("BẬT DUY TRÌ FCM NGAY");
-            setButtonColor(toggleBtn, "#10B981");
-        }
-        lastPingText.setText("Lần gửi nhịp tim FCM cuối: " + lastPing);
-    }
-
-    private Button createButton(String text, String bgHex, int textColor) {
-        Button btn = new Button(this);
-        btn.setText(text);
-        btn.setTextColor(textColor);
-        btn.setAllCaps(false);
-        btn.setTextSize(14);
-        btn.setTypeface(Typeface.DEFAULT_BOLD);
-        btn.setPadding(dp(16), dp(14), dp(16), dp(14));
-        setButtonColor(btn, bgHex);
-        return btn;
-    }
-
-    private void setButtonColor(Button btn, String bgHex) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor(bgHex));
-        bg.setCornerRadius(dp(12));
-        btn.setBackground(bg);
-    }
-
-    private int dp(int value) {
-        return (int) (value * getResources().getDisplayMetrics().density);
-    }
-}`
-            },
-            'HeartbeatReceiver.java': {
-                path: 'app/src/main/java/vn/romcn/fcmfixer/HeartbeatReceiver.java',
-                desc: 'Bộ phát tín hiệu ngầm đánh thức Google FCM định kỳ ngay cả khi tắt màn hình (Doze Mode) và tự chạy lại khi khởi động máy.',
-                code: `package vn.romcn.fcmfixer;
-
-import android.app.AlarmManager;
-import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.os.Build;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
-
-/**
- * BroadcastReceiver chịu trách nhiệm:
- * 1. Phát gói Intent nội bộ đánh thức Google Play Services (GTALK & MCS Heartbeat)
- * 2. Đặt lịch ExactAlarm cho chu kỳ tiếp theo (vượt qua chế độ nghỉ Doze Mode)
- * 3. Tự động khởi chạy lại khi người dùng khởi động lại điện thoại (BOOT_COMPLETED)
- */
-public class HeartbeatReceiver extends BroadcastReceiver {
-
-    private static final String ACTION_KEEPALIVE = "vn.romcn.fcmfixer.ACTION_KEEPALIVE_PING";
-
-    @Override
-    public void onReceive(Context context, Intent intent) {
-        SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE);
-        boolean isEnabled = prefs.getBoolean(MainActivity.KEY_ENABLED, false);
-        int interval = prefs.getInt(MainActivity.KEY_INTERVAL, 10);
-
-        if (!isEnabled) return;
-
-        // Phát tín hiệu ép Google Play Services kiểm tra và nối lại FCM
-        sendFcmHeartbeatBroadcast(context);
-
-        // Đặt lại lịch cho chu kỳ 5-10-15 phút kế tiếp
-        scheduleNextAlarm(context, interval);
-    }
-
-    public static void sendFcmHeartbeatBroadcast(Context context) {
-        // 2 Intent chuẩn của Google Services Framework giúp duy trì kết nối TCP FCM
-        Intent gtalkIntent = new Intent("com.google.android.intent.action.GTALK_HEARTBEAT");
-        Intent mcsIntent = new Intent("com.google.android.intent.action.MCS_HEARTBEAT");
-
-        context.sendBroadcast(gtalkIntent);
-        context.sendBroadcast(mcsIntent);
-
-        // Lưu thời gian kích hoạt gần nhất
-        String now = new SimpleDateFormat("HH:mm:ss - dd/MM", Locale.getDefault()).format(new Date());
-        context.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(MainActivity.KEY_LAST_PING, now)
-                .apply();
-    }
-
-    public static void scheduleNextAlarm(Context context, int intervalMinutes) {
-        AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        if (alarmManager == null) return;
-
-        Intent intent = new Intent(context, HeartbeatReceiver.class);
-        intent.setAction(ACTION_KEEPALIVE);
-
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            flags |= PendingIntent.FLAG_IMMUTABLE;
-        }
-
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1001, intent, flags);
-        long triggerAtMillis = System.currentTimeMillis() + (intervalMinutes * 60 * 1000L);
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
-            } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
-            }
-        } catch (SecurityException e) {
-            // Dự phòng nếu máy chưa cấp quyền Exact Alarm
-            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
-        }
-    }
-
-    public static void cancelAlarm(Context context) {
-        AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        if (alarmManager == null) return;
-
-        Intent intent = new Intent(context, HeartbeatReceiver.class);
-        intent.setAction(ACTION_KEEPALIVE);
-
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            flags |= PendingIntent.FLAG_IMMUTABLE;
-        }
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1001, intent, flags);
-        alarmManager.cancel(pendingIntent);
-    }
-}`
-            },
-            'AndroidManifest.xml': {
-                path: 'app/src/main/AndroidManifest.xml',
-                desc: 'Khai báo cấu hình ứng dụng. Cam kết KHÔNG có quyền android.permission.INTERNET để đảm bảo an toàn 100%.',
-                code: `<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="vn.romcn.fcmfixer">
-
-    <!-- TUYỆT ĐỐI KHÔNG XIN QUYỀN INTERNET ĐỂ BẢO MẬT 100% -->
-    <!-- Chỉ dùng quyền đặt lịch báo thức chính xác và tự chạy lại khi bật máy -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-
-    <application
-        android:allowBackup="true"
-        android:label="FCM Keep-Alive"
-        android:supportsRtl="true"
-        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <receiver
-            android:name=".HeartbeatReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="vn.romcn.fcmfixer.ACTION_KEEPALIVE_PING" />
-            </intent-filter>
-        </receiver>
-
-    </application>
-</manifest>`
-            },
-            'build.gradle': {
-                path: 'app/build.gradle',
-                desc: 'Cấu hình biên dịch không phụ thuộc thư viện ngoài (Zero dependencies) giúp file APK xuất ra chỉ nặng khoảng 65KB.',
-                code: `plugins {
-    id 'com.android.application'
-}
-
-android {
-    namespace 'vn.romcn.fcmfixer'
-    compileSdk 34
-
-    defaultConfig {
-        applicationId "vn.romcn.fcmfixer"
-        minSdk 23
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
-    }
-
-    buildTypes {
-        release {
-            minifyEnabled true
-            shrinkResources true
-        }
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
-    }
-}
-
-dependencies {
-    // ĐỂ TRỐNG HOÀN TOÀN: Không dùng thư viện ngoài để APK siêu nhẹ (~65KB) và không bao giờ lỗi build!
-}`
-            },
-            'build-apk.yml': {
-                path: '.github/workflows/build-apk.yml',
-                desc: 'Kịch bản All-in-One (Bản Fix chuẩn YAML 100%): Không dùng multi-line heredoc gây lỗi parser của GitHub Actions.',
-                code: `name: Build FCM Keep-Alive APK
+name: Build FCM KeepAlive APK
 
 on:
   push:
-    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
           distribution: 'temurin'
+          java-version: '17'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.5'
-
-      - name: Generate Android Project Structure
+      - name: Build Lightweight APK
         shell: bash
         run: |
-          mkdir -p app/src/main/java/vn/romcn/fcmfixer
+          set -e
+          mkdir -p src/vn/romcn/fcmkeepalive build/gen build/obj build/apk
+          
+          cat << 'EOF' > AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="vn.romcn.fcmkeepalive"
+              android:versionCode="1"
+              android:versionName="1.0">
+              <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="33" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+              <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+              <application
+                  android:label="FCM KeepAlive"
+                  android:theme="@android:style/Theme.DeviceDefault">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+                  <receiver
+                      android:name=".HeartbeatReceiver"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.BOOT_COMPLETED" />
+                          <action android:name="vn.romcn.fcmkeepalive.ALARM_TICK" />
+                      </intent-filter>
+                  </receiver>
+              </application>
+          </manifest>
+          EOF
 
-          printf '%s\n' \
-            'pluginManagement {' \
-            '    repositories {' \
-            '        google()' \
-            '        mavenCentral()' \
-            '        gradlePluginPortal()' \
-            '    }' \
-            '}' \
-            'dependencyResolutionManagement {' \
-            '    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)' \
-            '    repositories {' \
-            '        google()' \
-            '        mavenCentral()' \
-            '    }' \
-            '}' \
-            'rootProject.name = "FCMKeepAlive"' \
-            'include ":app"' > settings.gradle
+          cat << 'EOF' > src/vn/romcn/fcmkeepalive/HeartbeatReceiver.java
+          package vn.romcn.fcmkeepalive;
+          import android.app.AlarmManager;
+          import android.app.PendingIntent;
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
+          import android.os.Build;
 
-          printf '%s\n' \
-            'plugins {' \
-            '    id "com.android.application" version "8.2.2" apply false' \
-            '}' > build.gradle
+          public class HeartbeatReceiver extends BroadcastReceiver {
+              public static final String ACTION_TICK = "vn.romcn.fcmkeepalive.ALARM_TICK";
 
-          printf '%s\n' \
-            'plugins {' \
-            '    id "com.android.application"' \
-            '}' \
-            'android {' \
-            '    namespace "vn.romcn.fcmfixer"' \
-            '    compileSdk 34' \
-            '    defaultConfig {' \
-            '        applicationId "vn.romcn.fcmfixer"' \
-            '        minSdk 23' \
-            '        targetSdk 34' \
-            '        versionCode 1' \
-            '        versionName "1.0"' \
-            '    }' \
-            '    compileOptions {' \
-            '        sourceCompatibility JavaVersion.VERSION_11' \
-            '        targetCompatibility JavaVersion.VERSION_11' \
-            '    }' \
-            '}' \
-            'dependencies {}' > app/build.gradle
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  SharedPreferences prefs = context.getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE);
+                  boolean active = prefs.getBoolean("active", false);
+                  int mins = prefs.getInt("interval", 10);
+                  if (active) {
+                      sendFcmHeartbeat(context);
+                      scheduleNext(context, mins);
+                  }
+              }
 
-          printf '%s\n' \
-            '<?xml version="1.0" encoding="utf-8"?>' \
-            '<manifest xmlns:android="http://schemas.android.com/apk/res/android">' \
-            '    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />' \
-            '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' \
-            '    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />' \
-            '    <application' \
-            '        android:allowBackup="true"' \
-            '        android:label="FCM Keep-Alive"' \
-            '        android:supportsRtl="true"' \
-            '        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">' \
-            '        <activity android:name=".MainActivity" android:exported="true">' \
-            '            <intent-filter>' \
-            '                <action android:name="android.intent.action.MAIN" />' \
-            '                <category android:name="android.intent.category.LAUNCHER" />' \
-            '            </intent-filter>' \
-            '        </activity>' \
-            '        <receiver android:name=".HeartbeatReceiver" android:enabled="true" android:exported="true">' \
-            '            <intent-filter>' \
-            '                <action android:name="android.intent.action.BOOT_COMPLETED" />' \
-            '                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />' \
-            '                <action android:name="vn.romcn.fcmfixer.ACTION_KEEPALIVE_PING" />' \
-            '            </intent-filter>' \
-            '        </receiver>' \
-            '    </application>' \
-            '</manifest>' > app/src/main/AndroidManifest.xml
+              public static void sendFcmHeartbeat(Context context) {
+                  context.sendBroadcast(new Intent("com.google.android.intent.action.GTALK_HEARTBEAT"));
+                  context.sendBroadcast(new Intent("com.google.android.intent.action.MCS_HEARTBEAT"));
+                  SharedPreferences prefs = context.getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE);
+                  prefs.edit().putInt("count", prefs.getInt("count", 0) + 1).apply();
+              }
 
-          printf '%s\n' \
-            'package vn.romcn.fcmfixer;' \
-            'import android.app.AlarmManager;' \
-            'import android.app.PendingIntent;' \
-            'import android.content.BroadcastReceiver;' \
-            'import android.content.Context;' \
-            'import android.content.Intent;' \
-            'import android.content.SharedPreferences;' \
-            'import android.os.Build;' \
-            'import java.text.SimpleDateFormat;' \
-            'import java.util.Date;' \
-            'import java.util.Locale;' \
-            'public class HeartbeatReceiver extends BroadcastReceiver {' \
-            '    private static final String ACTION_KEEPALIVE = "vn.romcn.fcmfixer.ACTION_KEEPALIVE_PING";' \
-            '    @Override' \
-            '    public void onReceive(Context context, Intent intent) {' \
-            '        SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE);' \
-            '        if (!prefs.getBoolean(MainActivity.KEY_ENABLED, false)) return;' \
-            '        sendFcmHeartbeatBroadcast(context);' \
-            '        scheduleNextAlarm(context, prefs.getInt(MainActivity.KEY_INTERVAL, 10));' \
-            '    }' \
-            '    public static void sendFcmHeartbeatBroadcast(Context context) {' \
-            '        context.sendBroadcast(new Intent("com.google.android.intent.action.GTALK_HEARTBEAT"));' \
-            '        context.sendBroadcast(new Intent("com.google.android.intent.action.MCS_HEARTBEAT"));' \
-            '        String now = new SimpleDateFormat("HH:mm:ss - dd/MM", Locale.getDefault()).format(new Date());' \
-            '        context.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)' \
-            '                .edit().putString(MainActivity.KEY_LAST_PING, now).apply();' \
-            '    }' \
-            '    public static void scheduleNextAlarm(Context context, int intervalMinutes) {' \
-            '        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);' \
-            '        if (am == null) return;' \
-            '        Intent i = new Intent(context, HeartbeatReceiver.class).setAction(ACTION_KEEPALIVE);' \
-            '        int flags = PendingIntent.FLAG_UPDATE_CURRENT;' \
-            '        if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;' \
-            '        PendingIntent pi = PendingIntent.getBroadcast(context, 1001, i, flags);' \
-            '        long trigger = System.currentTimeMillis() + (intervalMinutes * 60 * 1000L);' \
-            '        try {' \
-            '            if (Build.VERSION.SDK_INT >= 23) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi);' \
-            '            else am.setExact(AlarmManager.RTC_WAKEUP, trigger, pi);' \
-            '        } catch (SecurityException e) {' \
-            '            am.set(AlarmManager.RTC_WAKEUP, trigger, pi);' \
-            '        }' \
-            '    }' \
-            '    public static void cancelAlarm(Context context) {' \
-            '        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);' \
-            '        if (am == null) return;' \
-            '        Intent i = new Intent(context, HeartbeatReceiver.class).setAction(ACTION_KEEPALIVE);' \
-            '        int flags = PendingIntent.FLAG_UPDATE_CURRENT;' \
-            '        if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;' \
-            '        am.cancel(PendingIntent.getBroadcast(context, 1001, i, flags));' \
-            '    }' \
-            '}' > app/src/main/java/vn/romcn/fcmfixer/HeartbeatReceiver.java
+              public static void scheduleNext(Context context, int minutes) {
+                  AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+                  Intent i = new Intent(context, HeartbeatReceiver.class);
+                  i.setAction(ACTION_TICK);
+                  int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      flags |= PendingIntent.FLAG_IMMUTABLE;
+                  }
+                  PendingIntent pi = PendingIntent.getBroadcast(context, 1001, i, flags);
+                  long triggerAt = System.currentTimeMillis() + (minutes * 60L * 1000L);
+                  if (am != null) {
+                      try {
+                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                              am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+                          } else {
+                              am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+                          }
+                      } catch (SecurityException e) {
+                          am.set(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+                      }
+                  }
+              }
 
-          printf '%s\n' \
-            'package vn.romcn.fcmfixer;' \
-            'import android.app.Activity;' \
-            'import android.content.Context;' \
-            'import android.content.Intent;' \
-            'import android.content.SharedPreferences;' \
-            'import android.graphics.Color;' \
-            'import android.graphics.Typeface;' \
-            'import android.graphics.drawable.GradientDrawable;' \
-            'import android.net.Uri;' \
-            'import android.os.Build;' \
-            'import android.os.Bundle;' \
-            'import android.provider.Settings;' \
-            'import android.widget.Button;' \
-            'import android.widget.LinearLayout;' \
-            'import android.widget.RadioButton;' \
-            'import android.widget.RadioGroup;' \
-            'import android.widget.ScrollView;' \
-            'import android.widget.TextView;' \
-            'import android.widget.Toast;' \
-            'public class MainActivity extends Activity {' \
-            '    public static final String PREFS_NAME = "fcm_keepalive_prefs";' \
-            '    public static final String KEY_ENABLED = "is_enabled";' \
-            '    public static final String KEY_INTERVAL = "interval_minutes";' \
-            '    public static final String KEY_LAST_PING = "last_ping_time";' \
-            '    private TextView statusText, lastPingText;' \
-            '    private Button toggleBtn;' \
-            '    private SharedPreferences prefs;' \
-            '    @Override' \
-            '    protected void onCreate(Bundle savedInstanceState) {' \
-            '        super.onCreate(savedInstanceState);' \
-            '        prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);' \
-            '        ScrollView scrollView = new ScrollView(this);' \
-            '        scrollView.setBackgroundColor(Color.parseColor("#09090B"));' \
-            '        scrollView.setFillViewport(true);' \
-            '        LinearLayout root = new LinearLayout(this);' \
-            '        root.setOrientation(LinearLayout.VERTICAL);' \
-            '        int pad = dp(20);' \
-            '        root.setPadding(pad, dp(32), pad, pad);' \
-            '        TextView title = new TextView(this);' \
-            '        title.setText("FCM Keep-Alive (ROM CN)");' \
-            '        title.setTextColor(Color.WHITE);' \
-            '        title.setTextSize(22);' \
-            '        title.setTypeface(Typeface.DEFAULT_BOLD);' \
-            '        root.addView(title);' \
-            '        TextView subtitle = new TextView(this);' \
-            '        subtitle.setText("Duy trì kết nối Google FCM • Không quyền Internet • Siêu nhẹ");' \
-            '        subtitle.setTextColor(Color.parseColor("#A1A1AA"));' \
-            '        subtitle.setTextSize(13);' \
-            '        subtitle.setPadding(0, dp(4), 0, dp(20));' \
-            '        root.addView(subtitle);' \
-            '        LinearLayout card = new LinearLayout(this);' \
-            '        card.setOrientation(LinearLayout.VERTICAL);' \
-            '        card.setPadding(dp(16), dp(16), dp(16), dp(16));' \
-            '        GradientDrawable cardBg = new GradientDrawable();' \
-            '        cardBg.setColor(Color.parseColor("#18181B"));' \
-            '        cardBg.setCornerRadius(dp(16));' \
-            '        cardBg.setStroke(dp(1), Color.parseColor("#27272A"));' \
-            '        card.setBackground(cardBg);' \
-            '        statusText = new TextView(this);' \
-            '        statusText.setTextSize(16);' \
-            '        statusText.setTypeface(Typeface.DEFAULT_BOLD);' \
-            '        card.addView(statusText);' \
-            '        lastPingText = new TextView(this);' \
-            '        lastPingText.setTextSize(13);' \
-            '        lastPingText.setTextColor(Color.parseColor("#A1A1AA"));' \
-            '        lastPingText.setPadding(0, dp(6), 0, 0);' \
-            '        card.addView(lastPingText);' \
-            '        root.addView(card);' \
-            '        TextView intervalLabel = new TextView(this);' \
-            '        intervalLabel.setText("Chu kỳ kiểm tra & kích hoạt lại FCM:");' \
-            '        intervalLabel.setTextColor(Color.WHITE);' \
-            '        intervalLabel.setTextSize(14);' \
-            '        intervalLabel.setTypeface(Typeface.DEFAULT_BOLD);' \
-            '        intervalLabel.setPadding(0, dp(24), 0, dp(10));' \
-            '        root.addView(intervalLabel);' \
-            '        RadioGroup radioGroup = new RadioGroup(this);' \
-            '        int currentInterval = prefs.getInt(KEY_INTERVAL, 10);' \
-            '        int[] intervals = {5, 10, 15};' \
-            '        for (int min : intervals) {' \
-            '            RadioButton rb = new RadioButton(this);' \
-            '            rb.setId(min);' \
-            '            String label = min + " phút / lần";' \
-            '            if (min == 10) label = label + " (Khuyên dùng)";' \
-            '            rb.setText(label);' \
-            '            rb.setTextColor(Color.parseColor("#E4E4E7"));' \
-            '            rb.setTextSize(14);' \
-            '            rb.setPadding(dp(8), dp(10), dp(8), dp(10));' \
-            '            if (min == currentInterval) rb.setChecked(true);' \
-            '            radioGroup.addView(rb);' \
-            '        }' \
-            '        radioGroup.setOnCheckedChangeListener((group, checkedId) -> {' \
-            '            prefs.edit().putInt(KEY_INTERVAL, checkedId).apply();' \
-            '            if (prefs.getBoolean(KEY_ENABLED, false)) {' \
-            '                HeartbeatReceiver.scheduleNextAlarm(this, checkedId);' \
-            '                Toast.makeText(this, "Đã cập nhật chu kỳ " + checkedId + " phút", Toast.LENGTH_SHORT).show();' \
-            '                updateUI();' \
-            '            }' \
-            '        });' \
-            '        root.addView(radioGroup);' \
-            '        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(' \
-            '                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);' \
-            '        btnParams.setMargins(0, dp(16), 0, 0);' \
-            '        toggleBtn = createButton("", "#10B981", Color.WHITE);' \
-            '        toggleBtn.setLayoutParams(btnParams);' \
-            '        toggleBtn.setOnClickListener(v -> toggleService());' \
-            '        root.addView(toggleBtn);' \
-            '        Button forcePingBtn = createButton("⚡ Bắn tín hiệu Reconnect FCM ngay", "#27272A", Color.WHITE);' \
-            '        forcePingBtn.setLayoutParams(btnParams);' \
-            '        forcePingBtn.setOnClickListener(v -> {' \
-            '            HeartbeatReceiver.sendFcmHeartbeatBroadcast(this);' \
-            '            Toast.makeText(this, "Đã gửi tín hiệu GTALK & MCS Heartbeat!", Toast.LENGTH_SHORT).show();' \
-            '            updateUI();' \
-            '        });' \
-            '        root.addView(forcePingBtn);' \
-            '        Button diagBtn = createButton("🔍 Mở bảng kiểm tra *#*#426#*#*", "#1E293B", Color.parseColor("#93C5FD"));' \
-            '        diagBtn.setLayoutParams(btnParams);' \
-            '        diagBtn.setOnClickListener(v -> openFcmDiagnostics());' \
-            '        root.addView(diagBtn);' \
-            '        scrollView.addView(root);' \
-            '        setContentView(scrollView);' \
-            '        updateUI();' \
-            '    }' \
-            '    private void toggleService() {' \
-            '        boolean isEnabled = prefs.getBoolean(KEY_ENABLED, false);' \
-            '        int interval = prefs.getInt(KEY_INTERVAL, 10);' \
-            '        if (!isEnabled) {' \
-            '            if (Build.VERSION.SDK_INT >= 31) {' \
-            '                android.app.AlarmManager am = (android.app.AlarmManager) getSystemService(Context.ALARM_SERVICE);' \
-            '                if (am != null && !am.canScheduleExactAlarms()) {' \
-            '                    Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);' \
-            '                    intent.setData(Uri.parse("package:" + getPackageName()));' \
-            '                    startActivity(intent);' \
-            '                    Toast.makeText(this, "Vui lòng cấp quyền Đặt báo thức chính xác!", Toast.LENGTH_LONG).show();' \
-            '                    return;' \
-            '                }' \
-            '            }' \
-            '            prefs.edit().putBoolean(KEY_ENABLED, true).apply();' \
-            '            HeartbeatReceiver.sendFcmHeartbeatBroadcast(this);' \
-            '            HeartbeatReceiver.scheduleNextAlarm(this, interval);' \
-            '            Toast.makeText(this, "Đã BẬT duy trì kết nối FCM!", Toast.LENGTH_SHORT).show();' \
-            '        } else {' \
-            '            prefs.edit().putBoolean(KEY_ENABLED, false).apply();' \
-            '            HeartbeatReceiver.cancelAlarm(this);' \
-            '            Toast.makeText(this, "Đã TẮT duy trì FCM.", Toast.LENGTH_SHORT).show();' \
-            '        }' \
-            '        updateUI();' \
-            '    }' \
-            '    private void openFcmDiagnostics() {' \
-            '        try {' \
-            '            sendBroadcast(new Intent("android.provider.Telephony.SECRET_CODE", Uri.parse("android_secret_code://426")));' \
-            '        } catch (Exception e) {' \
-            '            startActivity(new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode("*#*#426#*#*"))));' \
-            '        }' \
-            '    }' \
-            '    private void updateUI() {' \
-            '        boolean isEnabled = prefs.getBoolean(KEY_ENABLED, false);' \
-            '        int interval = prefs.getInt(KEY_INTERVAL, 10);' \
-            '        String lastPing = prefs.getString(KEY_LAST_PING, "Chưa kích hoạt");' \
-            '        if (isEnabled) {' \
-            '            statusText.setText("🟢 ĐANG HOẠT ĐỘNG (" + interval + " phút/lần)");' \
-            '            statusText.setTextColor(Color.parseColor("#34D399"));' \
-            '            toggleBtn.setText("TẮT DUY TRÌ FCM");' \
-            '            setButtonColor(toggleBtn, "#E11D48");' \
-            '        } else {' \
-            '            statusText.setText("⚪ ĐANG TẮT");' \
-            '            statusText.setTextColor(Color.parseColor("#A1A1AA"));' \
-            '            toggleBtn.setText("BẬT DUY TRÌ FCM NGAY");' \
-            '            setButtonColor(toggleBtn, "#10B981");' \
-            '        }' \
-            '        lastPingText.setText("Lần gửi nhịp tim FCM cuối - " + lastPing);' \
-            '    }' \
-            '    private Button createButton(String text, String bgHex, int textColor) {' \
-            '        Button btn = new Button(this);' \
-            '        btn.setText(text);' \
-            '        btn.setTextColor(textColor);' \
-            '        btn.setAllCaps(false);' \
-            '        btn.setTextSize(14);' \
-            '        btn.setTypeface(Typeface.DEFAULT_BOLD);' \
-            '        btn.setPadding(dp(16), dp(14), dp(16), dp(14));' \
-            '        setButtonColor(btn, bgHex);' \
-            '        return btn;' \
-            '    }' \
-            '    private void setButtonColor(Button btn, String bgHex) {' \
-            '        GradientDrawable bg = new GradientDrawable();' \
-            '        bg.setColor(Color.parseColor(bgHex));' \
-            '        bg.setCornerRadius(dp(12));' \
-            '        btn.setBackground(bg);' \
-            '    }' \
-            '    private int dp(int value) {' \
-            '        return (int) (value * getResources().getDisplayMetrics().density);' \
-            '    }' \
-            '}' > app/src/main/java/vn/romcn/fcmfixer/MainActivity.java
+              public static void cancel(Context context) {
+                  AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+                  Intent i = new Intent(context, HeartbeatReceiver.class);
+                  i.setAction(ACTION_TICK);
+                  int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      flags |= PendingIntent.FLAG_IMMUTABLE;
+                  }
+                  PendingIntent pi = PendingIntent.getBroadcast(context, 1001, i, flags);
+                  if (am != null) am.cancel(pi);
+              }
+          }
+          EOF
 
-      - name: Build Debug APK
-        run: gradle assembleDebug
+          cat << 'EOF' > src/vn/romcn/fcmkeepalive/MainActivity.java
+          package vn.romcn.fcmkeepalive;
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.view.Gravity;
+          import android.widget.Button;
+          import android.widget.LinearLayout;
+          import android.widget.RadioButton;
+          import android.widget.RadioGroup;
+          import android.widget.ScrollView;
+          import android.widget.TextView;
+          import android.widget.Toast;
 
-      - name: Upload APK Artifact
+          public class MainActivity extends Activity {
+              private SharedPreferences prefs;
+              private TextView statusTv;
+              private Button toggleBtn;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  prefs = getSharedPreferences("fcm_prefs", MODE_PRIVATE);
+
+                  ScrollView scroll = new ScrollView(this);
+                  scroll.setBackgroundColor(Color.parseColor("#111827"));
+
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  int pad = (int) (22 * getResources().getDisplayMetrics().density);
+                  root.setPadding(pad, pad, pad, pad);
+
+                  TextView title = new TextView(this);
+                  title.setText("FCM Keep-Alive (ROM CN)");
+                  title.setTextSize(22);
+                  title.setTypeface(null, Typeface.BOLD);
+                  title.setTextColor(Color.WHITE);
+                  root.addView(title);
+
+                  TextView sub = new TextView(this);
+                  sub.setText("Duy tri ket noi Google FCM ngam • Khong Internet • Sieu nhe");
+                  sub.setTextSize(13);
+                  sub.setTextColor(Color.parseColor("#9CA3AF"));
+                  sub.setPadding(0, 8, 0, 32);
+                  root.addView(sub);
+
+                  statusTv = new TextView(this);
+                  statusTv.setTextSize(15);
+                  statusTv.setPadding(30, 30, 30, 30);
+                  statusTv.setBackgroundColor(Color.parseColor("#1F2937"));
+                  root.addView(statusTv);
+
+                  TextView label = new TextView(this);
+                  label.setText("\nChu ky kiem tra & kich hoat lai FCM:");
+                  label.setTextColor(Color.WHITE);
+                  label.setTextSize(15);
+                  root.addView(label);
+
+                  RadioGroup rg = new RadioGroup(this);
+                  int savedInterval = prefs.getInt("interval", 10);
+                  int[] options = new int[]{5, 10, 15};
+                  for (int opt : options) {
+                      RadioButton rb = new RadioButton(this);
+                      rb.setId(opt);
+                      rb.setText(opt + " phut / lan");
+                      rb.setTextColor(Color.WHITE);
+                      rg.addView(rb);
+                      if (opt == savedInterval) rb.setChecked(true);
+                  }
+                  rg.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+                      @Override
+                      public void onCheckedChanged(RadioGroup group, int checkedId) {
+                          prefs.edit().putInt("interval", checkedId).apply();
+                          if (prefs.getBoolean("active", false)) {
+                              HeartbeatReceiver.scheduleNext(MainActivity.this, checkedId);
+                              updateUI();
+                          }
+                      }
+                  });
+                  root.addView(rg);
+
+                  toggleBtn = new Button(this);
+                  LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          LinearLayout.LayoutParams.WRAP_CONTENT);
+                  lp.setMargins(0, 36, 0, 16);
+                  toggleBtn.setLayoutParams(lp);
+                  toggleBtn.setOnClickListener(v -> {
+                      boolean nextState = !prefs.getBoolean("active", false);
+                      int mins = prefs.getInt("interval", 10);
+                      prefs.edit().putBoolean("active", nextState).apply();
+                      if (nextState) {
+                          HeartbeatReceiver.sendFcmHeartbeat(this);
+                          HeartbeatReceiver.scheduleNext(this, mins);
+                          Toast.makeText(this, "Da bat duy tri FCM!", Toast.LENGTH_SHORT).show();
+                      } else {
+                          HeartbeatReceiver.cancel(this);
+                          Toast.makeText(this, "Da tat duy tri FCM", Toast.LENGTH_SHORT).show();
+                      }
+                      updateUI();
+                  });
+                  root.addView(toggleBtn);
+
+                  Button pingBtn = new Button(this);
+                  pingBtn.setText("Ping Heartbeat Ngay Lap Tuc");
+                  pingBtn.setOnClickListener(v -> {
+                      HeartbeatReceiver.sendFcmHeartbeat(this);
+                      Toast.makeText(this, "Da ban tin hieu GTALK & MCS Heartbeat!", Toast.LENGTH_SHORT).show();
+                      updateUI();
+                  });
+                  root.addView(pingBtn);
+
+                  Button diagBtn = new Button(this);
+                  diagBtn.setText("Mo bang kiem tra *#*#426#*#*");
+                  diagBtn.setOnClickListener(v -> {
+                      try {
+                          sendBroadcast(new Intent("android.provider.Telephony.SECRET_CODE", Uri.parse("android_secret_code://426")));
+                      } catch (Exception ignored) {}
+                      Intent dial = new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode("*#*#426#*#*")));
+                      startActivity(dial);
+                  });
+                  root.addView(diagBtn);
+
+                  scroll.addView(root);
+                  setContentView(scroll);
+                  updateUI();
+              }
+
+              private void updateUI() {
+                  boolean active = prefs.getBoolean("active", false);
+                  int mins = prefs.getInt("interval", 10);
+                  int count = prefs.getInt("count", 0);
+                  if (active) {
+                      statusTv.setText("TRANG THAI: DANG HOAT DONG\nChu ky: " + mins + " phut/lan\nSo lan da kich FCM: " + count);
+                      statusTv.setTextColor(Color.parseColor("#34D399"));
+                      toggleBtn.setText("TAT DUY TRI FCM");
+                  } else {
+                      statusTv.setText("TRANG THAI: DANG TAT\nSo lan da kich FCM: " + count);
+                      statusTv.setTextColor(Color.parseColor("#F87171"));
+                      toggleBtn.setText("BAT DUY TRI FCM NGAY");
+                  }
+              }
+          }
+          EOF
+
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          PLATFORM=$(ls -d $ANDROID_HOME/platforms/android-* | sort -V | tail -n 1)
+
+          "$BUILD_TOOLS/aapt" package -f -m -J build/gen -M AndroidManifest.xml -I "$PLATFORM/android.jar"
+          javac -source 1.8 -target 1.8 -bootclasspath "$PLATFORM/android.jar" - classpath "$PLATFORM/android.jar" -d build/obj build/gen/vn/romcn/fcmkeepalive/*.java src/vn/romcn/fcmkeepalive/*.java 2>/dev/null || javac -source 1.8 -target 1.8 -cp "$PLATFORM/android.jar" -d build/obj src/vn/romcn/fcmkeepalive/*.java
+          "$BUILD_TOOLS/d8" --lib "$PLATFORM/android.jar" --output build/apk/ build/obj/vn/romcn/fcmkeepalive/*.class
+          "$BUILD_TOOLS/aapt" package -f -M AndroidManifest.xml -I "$PLATFORM/android.jar" -F build/apk/unsigned.apk build/apk/
+          "$BUILD_TOOLS/zipalign" -f 4 build/apk/unsigned.apk build/apk/aligned.apk
+
+          keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out FCM-KeepAlive-ROM-CN.apk build/apk/aligned.apk
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: FCM-KeepAlive-ROM-CN-APK
-          path: app/build/outputs/apk/debug/app-debug.apk`
-            }
-        };
-
-        let currentFile = 'build-apk.yml';
-        let simRunning = true;
-        let simInterval = 10;
-
-        function fallbackCopyText(text) {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-        }
-
-        function selectFile(fileName) {
-            currentFile = fileName;
-            document.getElementById('code-display').textContent = sourceFiles[fileName].code;
-            document.getElementById('file-desc').innerHTML = `
-                <span>${sourceFiles[fileName].desc}</span>
-                <span class="text-[11px] font-mono text-emerald-400">${sourceFiles[fileName].path}</span>
-            `;
-
-            Object.keys(sourceFiles).forEach(key => {
-                const tab = document.getElementById('tab-' + key);
-                if (key === fileName) {
-                    tab.className = "px-3.5 py-2 text-xs font-mono rounded-t-lg bg-zinc-900 text-emerald-400 border-t border-x border-zinc-800 font-semibold";
-                } else {
-                    tab.className = "px-3.5 py-2 text-xs font-mono rounded-t-lg text-zinc-400 hover:text-zinc-200";
-                }
-            });
-        }
-
-        function copyCurrentCode() {
-            fallbackCopyText(sourceFiles[currentFile].code);
-            const btn = document.getElementById('btn-copy');
-            btn.innerHTML = `<i class="fa-solid fa-check text-emerald-400"></i> Đã copy!`;
-            setTimeout(() => {
-                btn.innerHTML = `<i class="fa-regular fa-copy"></i> Copy file này`;
-            }, 1800);
-        }
-
-        function switchMainView(view) {
-            const codeView = document.getElementById('view-code');
-            const guideView = document.getElementById('view-guide');
-            const btnCode = document.getElementById('btn-view-code');
-            const btnGuide = document.getElementById('btn-view-guide');
-
-            if (view === 'code') {
-                codeView.classList.remove('hidden');
-                guideView.classList.add('hidden');
-                btnCode.className = "px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white shadow transition flex items-center gap-2";
-                btnGuide.className = "px-3.5 py-2 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition flex items-center gap-2";
-            } else {
-                codeView.classList.add('hidden');
-                guideView.classList.remove('hidden');
-                btnGuide.className = "px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white shadow transition flex items-center gap-2";
-                btnCode.className = "px-3.5 py-2 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition flex items-center gap-2";
-            }
-        }
-
-        function setSimInterval(min) {
-            simInterval = min;
-            [5, 10, 15].forEach(val => {
-                const btn = document.getElementById('int-' + val);
-                if (val === min) {
-                    btn.className = "py-2.5 rounded-xl text-xs font-semibold border border-emerald-500 bg-emerald-500/15 text-emerald-300 transition";
-                } else {
-                    btn.className = "py-2.5 rounded-xl text-xs font-semibold border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 transition";
-                }
-            });
-            addSimLog(`Updated ExactAlarm interval -> ${min} mins`);
-        }
-
-        function toggleSimService() {
-            simRunning = !simRunning;
-            const badge = document.getElementById('sim-badge');
-            const title = document.getElementById('sim-status-title');
-            const pulse = document.getElementById('sim-pulse');
-            const btn = document.getElementById('btn-sim-toggle');
-
-            if (simRunning) {
-                badge.className = "px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5";
-                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Đang chạy`;
-                title.textContent = `Đang duy trì nhịp tim (${simInterval}p/lần)`;
-                title.className = "text-sm font-bold text-emerald-400";
-                pulse.classList.remove('hidden');
-                btn.className = "w-full py-3 rounded-xl font-semibold text-xs bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition flex items-center justify-center gap-2";
-                btn.innerHTML = `<i class="fa-solid fa-power-off"></i> Tắt duy trì FCM`;
-                triggerManualHeartbeat();
-            } else {
-                badge.className = "px-2.5 py-1 rounded-full text-[11px] font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center gap-1.5";
-                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-zinc-500"></span> Đã tắt`;
-                title.textContent = "Đã dừng duy trì FCM";
-                title.className = "text-sm font-bold text-zinc-400";
-                pulse.classList.add('hidden');
-                btn.className = "w-full py-3 rounded-xl font-semibold text-xs bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-2";
-                btn.innerHTML = `<i class="fa-solid fa-play"></i> Bật duy trì FCM ngay`;
-                addSimLog("Canceled ExactAlarm schedule.");
-            }
-        }
-
-        function triggerManualHeartbeat() {
-            const now = new Date();
-            const timeStr = now.toTimeString().split(' ')[0];
-            document.getElementById('sim-last-ping').textContent = `Lần kích hoạt cuối: ${timeStr}`;
-            document.getElementById('modal-ping-time').textContent = `${timeStr} (ACK received)`;
-            addSimLog(`Sent: GTALK_HEARTBEAT & MCS_HEARTBEAT`, true);
-        }
-
-        function addSimLog(msg, highlight = false) {
-            const logs = document.getElementById('sim-logs');
-            const now = new Date().toTimeString().split(' ')[0];
-            const div = document.createElement('div');
-            div.className = highlight ? "text-emerald-400" : "text-zinc-400";
-            div.textContent = `[${now}] ${msg}`;
-            logs.prepend(div);
-        }
-
-        function openFcmDiagnosticsModal() {
-            const modal = document.getElementById('fcm-modal');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-        }
-
-        function closeFcmDiagnosticsModal() {
-            const modal = document.getElementById('fcm-modal');
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-        }
-
-        function copyWorkflowPath() {
-            fallbackCopyText('.github/workflows/build-apk.yml');
-        }
-
-        // Initialize first file
-        selectFile('build-apk.yml');
-    </script>
-</body>
-</html>
+          path: FCM-KeepAlive-ROM-CN.apk
