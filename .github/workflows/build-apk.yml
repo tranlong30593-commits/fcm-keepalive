@@ -14,7 +14,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build Lightweight APK
+      - name: Build Lightweight APK v2.0
         shell: bash
         run: |
           set -e
@@ -24,13 +24,15 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="vn.romcn.fcmkeepalive"
-              android:versionCode="1"
-              android:versionName="1.0">
+              android:versionCode="2"
+              android:versionName="2.0">
               <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="33" />
               <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
               <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
               <application
-                  android:label="FCM KeepAlive"
+                  android:label="FCM KeepAlive Pro"
                   android:theme="@android:style/Theme.DeviceDefault">
                   <activity
                       android:name=".MainActivity"
@@ -45,6 +47,8 @@ jobs:
                       android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.BOOT_COMPLETED" />
+                          <action android:name="android.intent.action.USER_PRESENT" />
+                          <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
                           <action android:name="vn.romcn.fcmkeepalive.ALARM_TICK" />
                       </intent-filter>
                   </receiver>
@@ -61,26 +65,75 @@ jobs:
           import android.content.Intent;
           import android.content.SharedPreferences;
           import android.os.Build;
+          import android.os.PowerManager;
+          import java.text.SimpleDateFormat;
+          import java.util.Date;
+          import java.util.Locale;
 
           public class HeartbeatReceiver extends BroadcastReceiver {
               public static final String ACTION_TICK = "vn.romcn.fcmkeepalive.ALARM_TICK";
 
               @Override
               public void onReceive(Context context, Intent intent) {
+                  if (intent == null || intent.getAction() == null) return;
                   SharedPreferences prefs = context.getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE);
                   boolean active = prefs.getBoolean("active", false);
+                  if (!active) return;
+
+                  String action = intent.getAction();
                   int mins = prefs.getInt("interval", 10);
-                  if (active) {
-                      sendFcmHeartbeat(context);
+
+                  if (Intent.ACTION_USER_PRESENT.equals(action) || Intent.ACTION_POWER_CONNECTED.equals(action)) {
+                      long lastPing = prefs.getLong("last_ping_ms", 0);
+                      if (System.currentTimeMillis() - lastPing > 120000L) {
+                          String reason = Intent.ACTION_USER_PRESENT.equals(action) ? "Mo khoa man hinh" : "Cam sac";
+                          sendFcmHeartbeat(context, reason);
+                          scheduleNext(context, mins);
+                      }
+                  } else {
+                      PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+                      boolean screenOn = pm != null && pm.isInteractive();
+                      String reason = Intent.ACTION_BOOT_COMPLETED.equals(action) ? "Khoi dong may" : (screenOn ? "Hen gio (Man bat)" : "Hen gio (Man tat)");
+                      sendFcmHeartbeat(context, reason);
                       scheduleNext(context, mins);
                   }
               }
 
-              public static void sendFcmHeartbeat(Context context) {
-                  context.sendBroadcast(new Intent("com.google.android.intent.action.GTALK_HEARTBEAT"));
-                  context.sendBroadcast(new Intent("com.google.android.intent.action.MCS_HEARTBEAT"));
+              public static void sendFcmHeartbeat(Context context, String reason) {
+                  String[] actions = new String[]{
+                      "com.google.android.intent.action.GTALK_HEARTBEAT",
+                      "com.google.android.intent.action.MCS_HEARTBEAT"
+                  };
+                  for (String act : actions) {
+                      Intent hb1 = new Intent(act);
+                      hb1.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+                      context.sendBroadcast(hb1);
+
+                      Intent hb2 = new Intent(act);
+                      hb2.setPackage("com.google.android.gms");
+                      hb2.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+                      context.sendBroadcast(hb2);
+                  }
+
                   SharedPreferences prefs = context.getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE);
-                  prefs.edit().putInt("count", prefs.getInt("count", 0) + 1).apply();
+                  int count = prefs.getInt("count", 0) + 1;
+                  long now = System.currentTimeMillis();
+                  String timeStr = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(now));
+                  String newEntry = "#" + count + " [" + timeStr + "] - " + reason;
+
+                  String oldLogs = prefs.getString("logs", "");
+                  String[] lines = oldLogs.isEmpty() ? new String[0] : oldLogs.split("\n");
+                  StringBuilder sb = new StringBuilder(newEntry);
+                  int limit = Math.min(lines.length, 9);
+                  for (int i = 0; i < limit; i++) {
+                      sb.append("\n").append(lines[i]);
+                  }
+
+                  prefs.edit()
+                      .putInt("count", count)
+                      .putLong("last_ping_ms", now)
+                      .putString("logs", sb.toString())
+                      .apply();
               }
 
               public static void scheduleNext(Context context, int minutes) {
@@ -93,9 +146,19 @@ jobs:
                   }
                   PendingIntent pi = PendingIntent.getBroadcast(context, 1001, i, flags);
                   long triggerAt = System.currentTimeMillis() + (minutes * 60L * 1000L);
+
+                  SharedPreferences prefs = context.getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE);
+                  boolean alarmClockMode = prefs.getBoolean("alarm_clock_mode", false);
+                  prefs.edit().putLong("next_ping_ms", triggerAt).apply();
+
                   if (am != null) {
                       try {
-                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                          if (alarmClockMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                              Intent showIntent = new Intent(context, MainActivity.class);
+                              PendingIntent showPi = PendingIntent.getActivity(context, 1002, showIntent, flags);
+                              AlarmManager.AlarmClockInfo info = new AlarmManager.AlarmClockInfo(triggerAt, showPi);
+                              am.setAlarmClock(info, pi);
+                          } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                               am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
                           } else {
                               am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi);
@@ -123,25 +186,34 @@ jobs:
           cat << 'EOF' > src/vn/romcn/fcmkeepalive/MainActivity.java
           package vn.romcn.fcmkeepalive;
           import android.app.Activity;
+          import android.content.Context;
           import android.content.Intent;
           import android.content.SharedPreferences;
           import android.graphics.Color;
           import android.graphics.Typeface;
           import android.net.Uri;
+          import android.os.Build;
           import android.os.Bundle;
-          import android.view.Gravity;
+          import android.os.PowerManager;
+          import android.provider.Settings;
           import android.widget.Button;
+          import android.widget.CheckBox;
           import android.widget.LinearLayout;
           import android.widget.RadioButton;
           import android.widget.RadioGroup;
           import android.widget.ScrollView;
           import android.widget.TextView;
           import android.widget.Toast;
+          import java.text.SimpleDateFormat;
+          import java.util.Date;
+          import java.util.Locale;
 
           public class MainActivity extends Activity {
               private SharedPreferences prefs;
               private TextView statusTv;
+              private TextView logTv;
               private Button toggleBtn;
+              private Button batteryBtn;
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
@@ -153,33 +225,38 @@ jobs:
 
                   LinearLayout root = new LinearLayout(this);
                   root.setOrientation(LinearLayout.VERTICAL);
-                  int pad = (int) (22 * getResources().getDisplayMetrics().density);
+                  int pad = (int) (20 * getResources().getDisplayMetrics().density);
                   root.setPadding(pad, pad, pad, pad);
 
                   TextView title = new TextView(this);
-                  title.setText("FCM Keep-Alive (ROM CN)");
-                  title.setTextSize(22);
+                  title.setText("FCM Keep-Alive v2.0 Pro");
+                  title.setTextSize(21);
                   title.setTypeface(null, Typeface.BOLD);
                   title.setTextColor(Color.WHITE);
                   root.addView(title);
 
                   TextView sub = new TextView(this);
-                  sub.setText("Duy tri ket noi Google FCM ngam • Khong Internet • Sieu nhe");
-                  sub.setTextSize(13);
+                  sub.setText("Duy tri Google FCM (ROM CN) • Khong Internet • Sieu nhe");
+                  sub.setTextSize(12);
                   sub.setTextColor(Color.parseColor("#9CA3AF"));
-                  sub.setPadding(0, 8, 0, 32);
+                  sub.setPadding(0, 6, 0, 24);
                   root.addView(sub);
 
                   statusTv = new TextView(this);
-                  statusTv.setTextSize(15);
-                  statusTv.setPadding(30, 30, 30, 30);
+                  statusTv.setTextSize(14);
+                  statusTv.setPadding(28, 28, 28, 28);
                   statusTv.setBackgroundColor(Color.parseColor("#1F2937"));
                   root.addView(statusTv);
+
+                  batteryBtn = new Button(this);
+                  batteryBtn.setOnClickListener(v -> requestIgnoreBattery());
+                  root.addView(batteryBtn);
 
                   TextView label = new TextView(this);
                   label.setText("\nChu ky kiem tra & kich hoat lai FCM:");
                   label.setTextColor(Color.WHITE);
-                  label.setTextSize(15);
+                  label.setTextSize(14);
+                  label.setTypeface(null, Typeface.BOLD);
                   root.addView(label);
 
                   RadioGroup rg = new RadioGroup(this);
@@ -193,30 +270,35 @@ jobs:
                       rg.addView(rb);
                       if (opt == savedInterval) rb.setChecked(true);
                   }
-                  rg.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
-                      @Override
-                      public void onCheckedChanged(RadioGroup group, int checkedId) {
-                          prefs.edit().putInt("interval", checkedId).apply();
-                          if (prefs.getBoolean("active", false)) {
-                              HeartbeatReceiver.scheduleNext(MainActivity.this, checkedId);
-                              updateUI();
-                          }
+                  rg.setOnCheckedChangeListener((group, checkedId) -> {
+                      prefs.edit().putInt("interval", checkedId).apply();
+                      if (prefs.getBoolean("active", false)) {
+                          HeartbeatReceiver.scheduleNext(MainActivity.this, checkedId);
+                          updateUI();
                       }
                   });
                   root.addView(rg);
 
+                  CheckBox dozeCb = new CheckBox(this);
+                  dozeCb.setText("Che do xuyen Doze tuyet doi (AlarmClock Mode)");
+                  dozeCb.setTextColor(Color.parseColor("#FBBF24"));
+                  dozeCb.setChecked(prefs.getBoolean("alarm_clock_mode", false));
+                  dozeCb.setOnCheckedChangeListener((btn, isChecked) -> {
+                      prefs.edit().putBoolean("alarm_clock_mode", isChecked).apply();
+                      if (prefs.getBoolean("active", false)) {
+                          HeartbeatReceiver.scheduleNext(MainActivity.this, prefs.getInt("interval", 10));
+                          updateUI();
+                      }
+                  });
+                  root.addView(dozeCb);
+
                   toggleBtn = new Button(this);
-                  LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          LinearLayout.LayoutParams.WRAP_CONTENT);
-                  lp.setMargins(0, 36, 0, 16);
-                  toggleBtn.setLayoutParams(lp);
                   toggleBtn.setOnClickListener(v -> {
                       boolean nextState = !prefs.getBoolean("active", false);
                       int mins = prefs.getInt("interval", 10);
                       prefs.edit().putBoolean("active", nextState).apply();
                       if (nextState) {
-                          HeartbeatReceiver.sendFcmHeartbeat(this);
+                          HeartbeatReceiver.sendFcmHeartbeat(this, "Bat dich vu");
                           HeartbeatReceiver.scheduleNext(this, mins);
                           Toast.makeText(this, "Da bat duy tri FCM!", Toast.LENGTH_SHORT).show();
                       } else {
@@ -230,8 +312,11 @@ jobs:
                   Button pingBtn = new Button(this);
                   pingBtn.setText("Ping Heartbeat Ngay Lap Tuc");
                   pingBtn.setOnClickListener(v -> {
-                      HeartbeatReceiver.sendFcmHeartbeat(this);
-                      Toast.makeText(this, "Da ban tin hieu GTALK & MCS Heartbeat!", Toast.LENGTH_SHORT).show();
+                      HeartbeatReceiver.sendFcmHeartbeat(this, "Bam nut Ping thu cong");
+                      if (prefs.getBoolean("active", false)) {
+                          HeartbeatReceiver.scheduleNext(this, prefs.getInt("interval", 10));
+                      }
+                      Toast.makeText(this, "Da ban GTALK & MCS Heartbeat!", Toast.LENGTH_SHORT).show();
                       updateUI();
                   });
                   root.addView(pingBtn);
@@ -247,24 +332,90 @@ jobs:
                   });
                   root.addView(diagBtn);
 
+                  TextView logTitle = new TextView(this);
+                  logTitle.setText("\nNhat ky 10 lan kich FCM gan nhat (Bam de lam moi):");
+                  logTitle.setTextColor(Color.WHITE);
+                  logTitle.setTextSize(14);
+                  logTitle.setTypeface(null, Typeface.BOLD);
+                  logTitle.setOnClickListener(v -> updateUI());
+                  root.addView(logTitle);
+
+                  logTv = new TextView(this);
+                  logTv.setTextSize(12);
+                  logTv.setTextColor(Color.parseColor("#D1D5DB"));
+                  logTv.setBackgroundColor(Color.parseColor("#1F2937"));
+                  logTv.setPadding(24, 24, 24, 24);
+                  logTv.setOnClickListener(v -> updateUI());
+                  root.addView(logTv);
+
+                  Button clearBtn = new Button(this);
+                  clearBtn.setText("Xoa nhat ky & Reset bo dem");
+                  clearBtn.setOnClickListener(v -> {
+                      prefs.edit().putInt("count", 0).putString("logs", "").apply();
+                      updateUI();
+                  });
+                  root.addView(clearBtn);
+
                   scroll.addView(root);
                   setContentView(scroll);
+              }
+
+              @Override
+              protected void onResume() {
+                  super.onResume();
                   updateUI();
+              }
+
+              private void requestIgnoreBattery() {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                      if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                          try {
+                              Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                              intent.setData(Uri.parse("package:" + getPackageName()));
+                              startActivity(intent);
+                              return;
+                          } catch (Exception ignored) {}
+                      }
+                  }
+                  try {
+                      Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                      intent.setData(Uri.parse("package:" + getPackageName()));
+                      startActivity(intent);
+                  } catch (Exception ignored) {}
               }
 
               private void updateUI() {
                   boolean active = prefs.getBoolean("active", false);
                   int mins = prefs.getInt("interval", 10);
                   int count = prefs.getInt("count", 0);
+                  long nextMs = prefs.getLong("next_ping_ms", 0);
+                  String nextStr = nextMs > 0 ? new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(nextMs)) : "--:--:--";
+
+                  boolean ignoringBattery = false;
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                      if (pm != null) ignoringBattery = pm.isIgnoringBatteryOptimizations(getPackageName());
+                  }
+
+                  if (ignoringBattery) {
+                      batteryBtn.setText("✓ Da mien tru toi uu Pin (Bam de mo App Info)");
+                  } else {
+                      batteryBtn.setText("⚠ Cap quyen Chay Ngam / Mien tru Pin (1 cham)");
+                  }
+
                   if (active) {
-                      statusTv.setText("TRANG THAI: DANG HOAT DONG\nChu ky: " + mins + " phut/lan\nSo lan da kich FCM: " + count);
+                      statusTv.setText("TRANG THAI: DANG HOAT DONG\nChu ky: " + mins + " phut/lan | Tong so lan kich: " + count + "\nDu kien nhip tiep theo: " + nextStr);
                       statusTv.setTextColor(Color.parseColor("#34D399"));
                       toggleBtn.setText("TAT DUY TRI FCM");
                   } else {
-                      statusTv.setText("TRANG THAI: DANG TAT\nSo lan da kich FCM: " + count);
+                      statusTv.setText("TRANG THAI: DANG TAT\nTong so lan da kich FCM: " + count);
                       statusTv.setTextColor(Color.parseColor("#F87171"));
                       toggleBtn.setText("BAT DUY TRI FCM NGAY");
                   }
+
+                  String logs = prefs.getString("logs", "");
+                  logTv.setText(logs.isEmpty() ? "Chua co nhat ky kich hoat nao." : logs);
               }
           }
           EOF
@@ -273,16 +424,16 @@ jobs:
           PLATFORM=$(ls -d $ANDROID_HOME/platforms/android-* | sort -V | tail -n 1)
 
           "$BUILD_TOOLS/aapt" package -f -m -J build/gen -M AndroidManifest.xml -I "$PLATFORM/android.jar"
-          javac -source 1.8 -target 1.8 -bootclasspath "$PLATFORM/android.jar" - classpath "$PLATFORM/android.jar" -d build/obj build/gen/vn/romcn/fcmkeepalive/*.java src/vn/romcn/fcmkeepalive/*.java 2>/dev/null || javac -source 1.8 -target 1.8 -cp "$PLATFORM/android.jar" -d build/obj src/vn/romcn/fcmkeepalive/*.java
+          javac -source 1.8 -target 1.8 -bootclasspath "$PLATFORM/android.jar" -classpath "$PLATFORM/android.jar" -d build/obj build/gen/vn/romcn/fcmkeepalive/*.java src/vn/romcn/fcmkeepalive/*.java 2>/dev/null || javac -source 1.8 -target 1.8 -cp "$PLATFORM/android.jar" -d build/obj src/vn/romcn/fcmkeepalive/*.java
           "$BUILD_TOOLS/d8" --lib "$PLATFORM/android.jar" --output build/apk/ build/obj/vn/romcn/fcmkeepalive/*.class
           "$BUILD_TOOLS/aapt" package -f -M AndroidManifest.xml -I "$PLATFORM/android.jar" -F build/apk/unsigned.apk build/apk/
           "$BUILD_TOOLS/zipalign" -f 4 build/apk/unsigned.apk build/apk/aligned.apk
 
           keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out FCM-KeepAlive-ROM-CN.apk build/apk/aligned.apk
+          "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out FCM-KeepAlive-v2-Pro.apk build/apk/aligned.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FCM-KeepAlive-ROM-CN-APK
-          path: FCM-KeepAlive-ROM-CN.apk
+          name: FCM-KeepAlive-v2-Pro-APK
+          path: FCM-KeepAlive-v2-Pro.apk
