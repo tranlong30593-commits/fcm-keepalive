@@ -14,7 +14,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build Lightweight APK v3.0
+      - name: Build Lightweight APK v3.1
         shell: bash
         run: |
           set -e
@@ -24,16 +24,17 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="vn.romcn.fcmkeepalive"
-              android:versionCode="3"
-              android:versionName="3.0">
+              android:versionCode="4"
+              android:versionName="3.1">
               <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="33" />
               <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
               <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
               <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
               <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
               <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
               <application
-                  android:label="FCM KeepAlive v3"
+                  android:label="FCM KeepAlive v3.1"
                   android:theme="@android:style/Theme.DeviceDefault">
                   <activity
                       android:name=".MainActivity"
@@ -65,6 +66,7 @@ jobs:
           import android.content.Context;
           import android.content.Intent;
           import android.content.SharedPreferences;
+          import android.net.wifi.WifiManager;
           import android.os.Build;
           import android.os.Handler;
           import android.os.Looper;
@@ -95,12 +97,9 @@ jobs:
                   }
 
                   if (Intent.ACTION_USER_PRESENT.equals(action) || Intent.ACTION_POWER_CONNECTED.equals(action)) {
-                      long lastPing = prefs.getLong("last_ping_ms", 0);
-                      if (now - lastPing > 120000L) {
-                          String reason = Intent.ACTION_USER_PRESENT.equals(action) ? "Mo khoa man hinh" : "Cam sac";
-                          sendFcmHeartbeat(context, reason);
-                          scheduleNext(context, mins);
-                      }
+                      String reason = Intent.ACTION_USER_PRESENT.equals(action) ? "Mo khoa man hinh" : "Cam sac";
+                      sendFcmHeartbeat(context, reason);
+                      scheduleNext(context, mins);
                       return;
                   }
 
@@ -116,10 +115,21 @@ jobs:
                           prefs.edit().putLong("last_screen_on_ms", now).apply();
                       }
                       long offDurationMs = now - lastScreenOn;
-                      long offMins = offDurationMs / 60000L;
+                      final long offMins = offDurationMs / 60000L;
                       boolean smartWake = prefs.getBoolean("smart_screen_wake", true);
 
                       final PendingResult pendingResult = goAsync();
+
+                      final PowerManager.WakeLock cpuWl = pm != null ? pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "fcmkeepalive:DeepCpuWake") : null;
+                      if (cpuWl != null) cpuWl.acquire(8500L);
+
+                      WifiManager wm = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                      final WifiManager.WifiLock wifiLock = wm != null ? wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "fcmkeepalive:WifiWake") : null;
+                      if (wifiLock != null) {
+                          try { wifiLock.acquire(); } catch (Exception ignored) {}
+                      }
+
+                      Handler handler = new Handler(Looper.getMainLooper());
 
                       if (smartWake && offDurationMs >= 14L * 60L * 1000L + 30000L && pm != null) {
                           @SuppressWarnings("deprecation")
@@ -127,41 +137,65 @@ jobs:
                               PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
                               "fcmkeepalive:SmartScreenWake"
                           );
-                          screenWl.acquire(2500L);
+                          screenWl.acquire(4500L);
 
-                          new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                          handler.postDelayed(new Runnable() {
                               @Override
                               public void run() {
                                   fireBroadcastsOnly(context);
                               }
-                          }, 500L);
+                          }, 1000L);
 
-                          new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                          handler.postDelayed(new Runnable() {
                               @Override
                               public void run() {
-                                  sendFcmHeartbeat(context, "Man tat " + offMins + "p (Da nhay sang)");
+                                  fireBroadcastsOnly(context);
+                              }
+                          }, 2200L);
+
+                          handler.postDelayed(new Runnable() {
+                              @Override
+                              public void run() {
+                                  sendFcmHeartbeat(context, "Man tat " + offMins + "p (Sang 4s + 3x Ping)");
                                   try {
                                       if (screenWl.isHeld()) screenWl.release();
                                   } catch (Exception ignored) {}
-                                  pendingResult.finish();
                               }
-                          }, 1500L);
-                      } else {
-                          final PowerManager.WakeLock cpuWl = pm != null ? pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "fcmkeepalive:CpuWake") : null;
-                          if (cpuWl != null) cpuWl.acquire(2000L);
+                          }, 3500L);
 
-                          fireBroadcastsOnly(context);
-
-                          new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                          handler.postDelayed(new Runnable() {
                               @Override
                               public void run() {
-                                  sendFcmHeartbeat(context, "Man tat " + offMins + "p (Ngam)");
-                                  try {
-                                      if (cpuWl != null && cpuWl.isHeld()) cpuWl.release();
-                                  } catch (Exception ignored) {}
+                                  try { if (wifiLock != null && wifiLock.isHeld()) wifiLock.release(); } catch (Exception ignored) {}
+                                  try { if (cpuWl != null && cpuWl.isHeld()) cpuWl.release(); } catch (Exception ignored) {}
                                   pendingResult.finish();
                               }
-                          }, 1000L);
+                          }, 7500L);
+                      } else {
+                          fireBroadcastsOnly(context);
+
+                          handler.postDelayed(new Runnable() {
+                              @Override
+                              public void run() {
+                                  fireBroadcastsOnly(context);
+                              }
+                          }, 1500L);
+
+                          handler.postDelayed(new Runnable() {
+                              @Override
+                              public void run() {
+                                  sendFcmHeartbeat(context, "Man tat " + offMins + "p (Ngam 2x Ping)");
+                              }
+                          }, 3000L);
+
+                          handler.postDelayed(new Runnable() {
+                              @Override
+                              public void run() {
+                                  try { if (wifiLock != null && wifiLock.isHeld()) wifiLock.release(); } catch (Exception ignored) {}
+                                  try { if (cpuWl != null && cpuWl.isHeld()) cpuWl.release(); } catch (Exception ignored) {}
+                                  pendingResult.finish();
+                              }
+                          }, 6000L);
                       }
                   }
               }
@@ -302,14 +336,14 @@ jobs:
                   root.setPadding(pad, pad, pad, pad);
 
                   TextView title = new TextView(this);
-                  title.setText("FCM Keep-Alive v3.0 Smart");
+                  title.setText("FCM Keep-Alive v3.1 DeepWake");
                   title.setTextSize(21);
                   title.setTypeface(null, Typeface.BOLD);
                   title.setTextColor(Color.WHITE);
                   root.addView(title);
 
                   TextView sub = new TextView(this);
-                  sub.setText("Duy tri Google FCM (ROM CN) • Smart Wakeup >15p • Sieu nhe");
+                  sub.setText("Duy tri Google FCM (ROM CN) • 4s Wake + 8s NetHold • Sieu nhe");
                   sub.setTextSize(12);
                   sub.setTextColor(Color.parseColor("#9CA3AF"));
                   sub.setPadding(0, 6, 0, 20);
@@ -366,7 +400,7 @@ jobs:
                   root.addView(dozeCb);
 
                   CheckBox wakeCb = new CheckBox(this);
-                  wakeCb.setText("Nhay sang man hinh (1.5s) khi may da tat man >= 15 phut");
+                  wakeCb.setText("Nhay sang 4s + Giu CPU/WiFi 8s khi tat man >= 15p");
                   wakeCb.setTextColor(Color.parseColor("#38BDF8"));
                   wakeCb.setChecked(prefs.getBoolean("smart_screen_wake", true));
                   wakeCb.setOnCheckedChangeListener((btn, isChecked) -> {
@@ -385,7 +419,7 @@ jobs:
                       if (nextState) {
                           HeartbeatReceiver.sendFcmHeartbeat(this, "Bat dich vu");
                           HeartbeatReceiver.scheduleNext(this, mins);
-                          Toast.makeText(this, "Da bat duy tri FCM v3.0!", Toast.LENGTH_SHORT).show();
+                          Toast.makeText(this, "Da bat duy tri FCM v3.1!", Toast.LENGTH_SHORT).show();
                       } else {
                           HeartbeatReceiver.cancel(this);
                           Toast.makeText(this, "Da tat duy tri FCM", Toast.LENGTH_SHORT).show();
@@ -402,7 +436,7 @@ jobs:
                       if (prefs.getBoolean("active", false)) {
                           HeartbeatReceiver.scheduleNext(this, prefs.getInt("interval", 10));
                       }
-                      Toast.makeText(this, "Da ban GTALK & MCS Heartbeat (Foreground)!", Toast.LENGTH_SHORT).show();
+                      Toast.makeText(this, "Da ban GTALK & MCS Heartbeat!", Toast.LENGTH_SHORT).show();
                       updateUI();
                   });
                   root.addView(pingBtn);
@@ -517,10 +551,10 @@ jobs:
           "$BUILD_TOOLS/zipalign" -f 4 build/apk/unsigned.apk build/apk/aligned.apk
 
           keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out FCM-KeepAlive-v3-Smart.apk build/apk/aligned.apk
+          "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out FCM-KeepAlive-v3.1-DeepWake.apk build/apk/aligned.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FCM-KeepAlive-v3-Smart-APK
-          path: FCM-KeepAlive-v3-Smart.apk
+          name: FCM-KeepAlive-v3.1-DeepWake-APK
+          path: FCM-KeepAlive-v3.1-DeepWake.apk
